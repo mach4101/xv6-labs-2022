@@ -1,0 +1,15 @@
+usertrap
+7
+SYS_exec
+user mode
+lw a3,0(zero)
+a3
+
+because the the load page fault
+address 0 doesn't mapped in the kernel address space
+yes, according to the value of scause, the value represent the fault of loading a unused page memoray
+
+initcode\000\000\000\000\000\000\000
+1
+
+
