@@ -132,6 +132,15 @@ found:
     return 0;
   }
 
+    // Allocate a shared page.
+  if((p -> usyscall_ptr = (struct usyscall *) kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -139,6 +148,8 @@ found:
     release(&p->lock);
     return 0;
   }
+
+  p -> usyscall_ptr -> pid = p -> pid;
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -155,9 +166,14 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  if(p -> usyscall_ptr)
+    kfree((void*)p->usyscall_ptr);
+  p->usyscall_ptr = 0;
+
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -169,6 +185,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -201,6 +218,15 @@ proc_pagetable(struct proc *p)
     uvmfree(pagetable, 0);
     return 0;
   }
+  
+  // create a shared page for the ugetpid syscall between kernel/user mode
+  // so the perm must be PTE_U and PTE_R but not allowed PTE_W
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+        (uint64)(p->usyscall_ptr), PTE_U | PTE_R) < 0) {
+    uvmunmap(pagetable, USYSCALL, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
 
   return pagetable;
 }
@@ -212,6 +238,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 

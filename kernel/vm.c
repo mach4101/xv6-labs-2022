@@ -91,6 +91,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
     if(*pte & PTE_V) {
+      
       pagetable = (pagetable_t)PTE2PA(*pte);
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
@@ -436,4 +437,39 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+
+int
+walkprint(pagetable_t pagetable, int level) {
+  for(int i = 0; i < 512; ++i) {
+    pte_t pte = pagetable[i];
+    
+    if(pte & PTE_V) {
+      
+      for(int i = 0; i < level; ++i) {
+        if(i != level - 1)
+          printf(".. ");
+        else
+          printf("..");
+      }
+      
+      printf("%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
+      uint64 child = PTE2PA(pte);
+
+      if(level < 3)
+        walkprint((pagetable_t)child, level + 1);
+    }
+  }
+  return 0;
+}
+
+// print the structure of the given pagetable
+int
+vmprint(pagetable_t pagetable) {
+  // displays the argument to vmprint
+  printf("page table %p\n", pagetable);
+ 
+  walkprint(pagetable, 1);
+  return 0;
 }

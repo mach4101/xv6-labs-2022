@@ -75,6 +75,37 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 buf;
+  uint64 abits;
+  int num;
+
+  int mask = 0;
+
+  argaddr(0, &buf);
+  argint(1, &num);
+  argaddr(2, &abits);
+
+	struct proc * p = myproc();
+
+  for(int i = 0; i < num; ++i) {
+		// get the correspond pte with the given buf page    
+		pte_t * pte = walk(p -> pagetable, buf + i * PGSIZE, 0);
+		
+		if(pte == 0) 
+			panic("err");
+
+    // if this pte has been accessed, set mask
+    if((*pte & PTE_A) == PTE_A) {
+      mask |= (1L << i);
+      // clear the accessed flag
+      *pte = *pte & (~PTE_A);
+    }
+  }
+
+  if((copyout(p->pagetable, abits,
+          (char*)&mask, sizeof(mask) )) < 0)
+    return -1;
+
   return 0;
 }
 #endif
