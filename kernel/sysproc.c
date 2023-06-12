@@ -7,6 +7,31 @@
 #include "proc.h"
 
 uint64
+sys_sigalarm(void) {
+  int ticks;
+  uint64 handler;
+
+  argint(0, &ticks);
+  argaddr(1, &handler);
+
+  struct proc * p = myproc();
+  p -> interval_ticks = ticks;
+  p -> handler = (void(*)()) handler;
+   // the cur proc has started
+
+  return 0;
+}
+
+uint64
+sys_sigreturn(void){
+  struct proc * p = myproc();
+  memmove(p->trapframe, p->backup, sizeof(struct trapframe));
+  p -> flag = 0;
+
+  return p->trapframe->a0;
+}
+
+uint64
 sys_exit(void)
 {
   int n;
@@ -57,6 +82,10 @@ sys_sleep(void)
   argint(0, &n);
   if(n < 0)
     n = 0;
+ 
+  // insert backtrace there
+  backtrace();
+
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){

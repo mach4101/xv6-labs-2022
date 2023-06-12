@@ -1,0 +1,17 @@
+a0 a1 a2, the register a2 holds 13 in main's call to printf
+
+li a1, 12 represent the function call has been finished and get the result of f function
+
+1536(ra) = ra + 1536 = pc + 1536 = 097 + 1536 = 15ed
+
+after the jalr to printf in main, ra register load the next register addr, so it is the 600080e7 + 4 = 600080eb
+
+the output is HE110 World
+in big-endian machine, we can set i to be 0x00726c64 to get the same result
+and 57616 can be changed as 61675(?)
+
+y=8229
+y=1 (if keep the above statement)
+depend on the context(?) 
+
+

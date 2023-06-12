@@ -104,4 +104,13 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  
+  // lab4 need field, the number of ticks and pointer to the handler function
+  int interval_ticks;
+  void (*handler)();
+  int total_ticks;
+  
+  struct trapframe * backup;
+  int flag;
 };

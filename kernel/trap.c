@@ -49,6 +49,10 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
+
+  // save status here
+  
+  
   
   if(r_scause() == 8){
     // system call
@@ -67,6 +71,20 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+    
+    if(which_dev == 2) {
+      p -> total_ticks ++;
+      if(p -> total_ticks >= p -> interval_ticks 
+          && p -> interval_ticks != 0 && p -> flag == 0) {
+       
+        memmove(p->backup, p->trapframe, sizeof(struct trapframe));
+        
+        p -> total_ticks -=  p -> interval_ticks;
+        p -> trapframe -> epc = (uint64) (p -> handler);
+
+        p -> flag = 1;
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -106,7 +124,7 @@ usertrapret(void)
   p->trapframe->kernel_sp = p->kstack + PGSIZE; // process's kernel stack
   p->trapframe->kernel_trap = (uint64)usertrap;
   p->trapframe->kernel_hartid = r_tp();         // hartid for cpuid()
-
+  
   // set up the registers that trampoline.S's sret will use
   // to get to user space.
   
