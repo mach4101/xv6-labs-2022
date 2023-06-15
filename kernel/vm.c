@@ -5,11 +5,16 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
  */
 pagetable_t kernel_pagetable;
+
+extern struct spinlock reflock;
+extern int refcount[PHYSTOP/PGSIZE];
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
@@ -72,8 +77,7 @@ kvminithart()
 
 // Return the address of the PTE in page table pagetable
 // that corresponds to virtual address va.  If alloc!=0,
-// create any required page-table pages.
-//
+// create any required page-table pages.//
 // The risc-v Sv39 scheme has three levels of page-table
 // pages. A page-table page contains 512 64-bit PTEs.
 // A 64-bit virtual address is split into five fields:
@@ -308,22 +312,36 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+ // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+
+    // if the old page is writable
+    if(*pte & PTE_W) {
+      *pte = *pte & (~PTE_W);
+      *pte = *pte | PTE_COW; // set as a cow page
+    }
+
     pa = PTE2PA(*pte);
+    // clean the PTE_W of the parent pte to read only
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    
+
+    // add ref count
+    acquire(&reflock);
+    refcount[pa / PGSIZE] ++;
+    release(&reflock);
+
+    // mapping the new page table entry to parent physical page
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      // kfree(mem);
       goto err;
     }
+    
   }
   return 0;
 
@@ -358,6 +376,32 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
+
+    struct proc * p = myproc();
+    pte_t * pte = walk(pagetable, va0, 0);
+    if(pte == 0) p -> killed = 1;
+
+    // va is valid and the page is valid and cow
+    if((va0 < p->sz) && (*pte & PTE_V) && (*pte & PTE_COW)) {
+      uint64 pa_new = (uint64)kalloc();
+
+      if(pa_new == 0) {
+        p -> killed = 1;
+      } else {
+        memmove((void *) pa_new, (void *)pa0, PGSIZE);
+        
+        // 必须提前保存，因为uvmunmap会将pte_v置零
+        uint flags = PTE_FLAGS(*pte);
+
+        uvmunmap(pagetable, va0, 1, 1);
+
+        *pte = (PA2PTE(pa_new) | flags | PTE_W); 
+        *pte = *pte & (~PTE_COW);
+        pa0 = pa_new;
+      }
+    }
+
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
@@ -437,3 +481,5 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+

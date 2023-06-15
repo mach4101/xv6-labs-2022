@@ -29,6 +29,46 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+
+int
+cowhandler(pagetable_t pagetable, uint64 va) {
+  if(va >= MAXVA) {
+    panic("over the maxva");
+    return -1;
+  }
+
+  pte_t * pte = walk(pagetable, va, 0);
+  if(pte == 0) {
+    panic("pte is not exist");
+    return -1;
+  }
+
+  // only cow page and valid
+  if( (*pte & PTE_COW) == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) {
+    panic("permission error");
+    return -1;
+  }
+
+  uint64 pa_new = (uint64)kalloc();
+  if(pa_new == 0) {
+    panic("kalloc error");
+    return -1;
+  }
+
+  uint64 pa_old = PTE2PA(*pte);
+  memmove((void *) pa_new, (void *) pa_old, PGSIZE);
+  
+  // decrease the ref of the old pa
+  kfree((void *) pa_old); 
+  
+  // set new pte is writable and not a cow page
+  *pte = PA2PTE(pa_new) | PTE_FLAGS(*pte) | PTE_W;
+  *pte = *pte & (~PTE_COW);
+  
+  return 0;
+}
+
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,7 +105,15 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if (r_scause() == 15) {
+    uint64 va = r_stval();
+    if(va >= p -> sz) p -> killed = 1;
+
+    if(cowhandler(p -> pagetable, va) < 0) {
+      p -> killed = 1;
+    }
+  } 
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
