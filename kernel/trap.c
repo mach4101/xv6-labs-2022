@@ -33,25 +33,21 @@ trapinithart(void)
 int
 cowhandler(pagetable_t pagetable, uint64 va) {
   if(va >= MAXVA) {
-    panic("over the maxva");
     return -1;
   }
 
   pte_t * pte = walk(pagetable, va, 0);
   if(pte == 0) {
-    panic("pte is not exist");
     return -1;
   }
 
   // only cow page and valid
   if( (*pte & PTE_COW) == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) {
-    panic("permission error");
     return -1;
   }
 
   uint64 pa_new = (uint64)kalloc();
   if(pa_new == 0) {
-    panic("kalloc error");
     return -1;
   }
 
