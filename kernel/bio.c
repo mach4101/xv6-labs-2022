@@ -39,7 +39,7 @@ binit(void)
 {
   for(int i = 0; i < BUCKET_SIZE; ++i) {
     initlock(&bcaches[i].lock, "bucket_lock");
-    for(int j = 0; j < BUFFER_SIZE; ++i) {
+    for(int j = 0; j < BUFFER_SIZE; ++j) {
       initsleeplock(&bcaches[i].buf[j].lock, "buf_lock");
     }
   }
