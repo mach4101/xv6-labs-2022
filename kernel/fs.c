@@ -384,7 +384,7 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   uint *b;
-  struct buf *bp;
+  struct buf *bp, *inbp, *ininbp;
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0){
@@ -421,8 +421,8 @@ bmap(struct inode *ip, uint bn)
   // 二次间接
 
   bn -= NINDIRECT;
-  int index = bn / NDINDIRECT;
-  int offset = bn % NDINDIRECT;
+  int index = bn / NINDIRECT;
+  int offset = bn % NINDIRECT;
 
   if(bn < NDINDIRECT) {
     if((addr = ip->addrs[NDIRECT + 1]) == 0) {
@@ -432,7 +432,7 @@ bmap(struct inode *ip, uint bn)
       ip->addrs[NDIRECT + 1] = addr;
     }
     // read the single indirect block
-    struct buf * inbp = bread(ip->dev, addr);
+    inbp = bread(ip->dev, addr);
     a = (uint*)inbp->data; // get byte array
     
     if((addr = a[index]) == 0) {
@@ -444,7 +444,7 @@ bmap(struct inode *ip, uint bn)
     }
     brelse(inbp);
     
-    struct buf * ininbp = bread(ip->dev, addr);
+    ininbp = bread(ip->dev, addr);
     
     b = (uint*)ininbp -> data;
     if((addr = b[offset]) == 0) {
@@ -495,12 +495,12 @@ itrunc(struct inode *ip)
     bp = bread(ip -> dev, ip-> addrs[NDIRECT + 1]);
     a = (uint*) bp -> data;
     
-    for(i = 0; i < NDINDIRECT; ++i) {
+    for(i = 0; i < NINDIRECT; ++i) {
       if(a[i]) {
         struct buf * inbp = bread(ip -> dev, a[i]);
         b = (uint *)inbp -> data;
 
-        for(j = 0; j < NDINDIRECT; ++j)
+        for(j = 0; j < NINDIRECT; ++j)
           if(b[j]) bfree(ip -> dev, b[j]);
       
         brelse(inbp);
@@ -509,7 +509,7 @@ itrunc(struct inode *ip)
     }
     
     brelse(bp);
-    bfree(ip -> dev, ip -> addrs[NDINDIRECT]);
+    bfree(ip -> dev, ip -> addrs[NDIRECT + 1]);
     ip -> addrs[NDIRECT + 1] = 0;
   }
   ip->size = 0;
