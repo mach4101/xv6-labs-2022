@@ -1,5 +1,4 @@
-//
-// File-system system calls.
+/// File-system system calls.
 // Mostly argument checking, since we don't trust
 // user code, and calls into file.c and fs.c.
 //
@@ -340,6 +339,39 @@ sys_open(void)
     end_op();
     return -1;
   }
+  
+  int threshold = 10;
+  if(ip -> type == T_SYMLINK && !(omode & O_NOFOLLOW)) {
+    for(int i = 0; i < threshold; ++i) {
+      if(readi(ip, 0, (uint64)path, 0, MAXPATH) != MAXPATH) {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      
+      iunlockput(ip);
+      ip = namei(path);
+
+      if(ip == 0) {
+        end_op();
+        return -1;
+      }
+
+      ilock(ip);
+
+      if(ip -> type != T_SYMLINK) {
+        break;
+      }
+    }
+    
+    if(ip -> type == T_SYMLINK) {
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
+  
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
@@ -501,5 +533,34 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void) {
+  char target[MAXPATH], path[MAXPATH];
+ 
+  struct inode * ppath;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0) 
+    return -1;
+  
+  begin_op();
+
+  ppath = create(path, T_SYMLINK,0 ,0);
+
+  if (ppath == 0) {
+    end_op();
+    return -1;
+  }
+
+  if(writei(ppath, 0, (uint64)target, 0, MAXPATH) < MAXPATH) {
+    iunlockput(ppath);
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ppath);
+  end_op();
   return 0;
 }
