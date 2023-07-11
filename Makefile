@@ -189,8 +189,6 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_mmaptest\
-	$U/_mmap\
-	$U/_munmap\
 
 
 

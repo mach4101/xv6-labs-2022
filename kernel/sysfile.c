@@ -503,3 +503,103 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void) {
+  uint64 fail = (uint64)((char*) -1);
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+
+  argaddr(0, &addr);
+  argint(1, &length);
+  argint(2, &prot);
+  argint(3, &flags);
+  argint(4, &fd);
+  argint(5, &offset); 
+ 
+  struct proc * p = myproc();
+  struct file * f = p -> ofile[fd];
+
+  length = PGROUNDUP(length);
+
+  // permission check
+  if(MAXVA - length < p -> sz) 
+    return fail;
+  if(!f -> readable && (prot & PROT_READ)) // 读不可读
+    return fail;
+  if((!f -> writable) && (prot & PROT_WRITE) && (flags == MAP_SHARED)) // 写与写回不可写
+    return fail;
+  
+  for(int i = 0; i < NVMA; ++i) {
+    struct vma * vma = &p -> vmas[i];
+    if(vma -> valid == 0) {
+      vma -> valid = 1;
+      vma -> addr = p -> sz;
+      p -> sz += length;
+      vma -> length = length;
+      vma -> prot = prot;
+      vma -> flags = flags;
+      vma -> fd = fd;
+      vma -> offset = offset;
+      vma -> f = f;
+      filedup(f); // 增加文件引用数，保证mmap期间不被关闭
+      return vma -> addr; 
+    }
+  }
+  
+  // vma用完
+  return fail;
+}
+
+uint64
+sys_munmap(void) {
+  uint64 addr;
+  int length;
+
+  argaddr(0, &addr);
+  argint(0, &length);
+
+  struct proc * p = myproc();
+  struct vma * vma = 0;
+
+  int idx = -1;
+
+  for(int i = 0; i < NVMA; ++i) {
+    if(p -> vmas[i].valid && addr >= p -> vmas[i].addr 
+        && addr <= p -> vmas[i].addr + p -> vmas[i].length) {
+      idx = i;
+      vma = &p->vmas[i];
+      break;
+    }
+  }
+
+  if(idx == -1) return -1;
+
+  addr = PGROUNDDOWN(addr);
+  length = PGROUNDUP(length);
+
+  if(vma -> flags & MAP_SHARED) {
+    if(filewrite(vma -> f, addr, length) < 0) {
+      printf("munmap: filewrite < 0\n");
+    }
+  }
+
+  //删除虚拟页表项释放物理页
+
+  uvmunmap(p -> pagetable, addr, length/PGSIZE, 1);
+
+  if(addr == vma -> addr && length == vma -> length) {
+    fileclose(vma -> f);
+    vma -> valid = 0;
+  } else if(addr == vma  -> addr) {
+    vma -> addr += length;
+    vma -> length -= length;
+    vma -> offset += length;
+  } else if((addr + length) == (vma -> addr + vma -> length)) {
+    vma -> length -= length;
+  } else {
+    panic("not coverd");
+  }
+
+  return 0;
+}
